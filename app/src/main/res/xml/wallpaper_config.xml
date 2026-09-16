@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  thumbnail: gambar kecil yang muncul di menu "Pilih Wallpaper" HP.
+  GANTI drawable ic_wallpaper_icon dengan screenshot akuarium kamu
+  yang sudah dicrop persegi, biar kelihatan menarik di menu pemilihan.
+-->
+<wallpaper xmlns:android="http://schemas.android.com/apk/res/android"
+    android:thumbnail="@drawable/ic_wallpaper_icon"
+    android:description="@string/wallpaper_description" />
