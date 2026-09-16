@@ -9,9 +9,7 @@ android {
 
     defaultConfig {
         applicationId = "com.gentlefin.wallpaper"
-        minSdk = 24 // Android 7.0+ - CATATAN: laporan bug WebGL-di-wallpaper
-                    // pernah muncul justru di Android 7, jadi minSdk ini
-                    // mungkin perlu dinaikkan tergantung hasil testing kamu.
+        minSdk = 24
         targetSdk = 34
         versionCode = 1
         versionName = "0.1-dev"
@@ -33,4 +31,5 @@ android {
 
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.webkit:webkit:1.15.0")
 }
