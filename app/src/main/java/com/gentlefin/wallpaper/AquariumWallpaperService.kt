@@ -1,51 +1,19 @@
-package com.gentlefin.wallpaper
+ package com.gentlefin.wallpaper
 
 import android.annotation.SuppressLint
 import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
 import android.os.Handler
 import android.os.Looper
 import android.service.wallpaper.WallpaperService
 import android.view.MotionEvent
 import android.view.SurfaceHolder
+import android.webkit.ConsoleMessage
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
 
-/**
- * ==============================================================
- *  CATATAN PENTING - BACA DULU SEBELUM BUILD
- * ==============================================================
- *
- * Pendekatan di file ini: WebView dibuat DI MEMORI (tidak pernah
- * ditempel ke Window/Activity sungguhan), lalu isinya digambar
- * manual berulang-ulang (~30x/detik) ke Canvas milik Surface
- * wallpaper lewat webView.draw(canvas). Ini pendekatan paling
- * umum dipakai contoh WebView-di-WallpaperService yang beredar.
- *
- * TAPI - ini justru titik paling rawan buat kasus kamu: WebGL
- * (dipakai skrip akuarium via Three.js) di banyak device BUTUH
- * WebView benar2 "attached ke window" supaya GPU driver mau
- * bikin context render. WebView yang cuma hidup di memori (spt
- * kode di bawah) beberapa kali dilaporkan gagal dengan pesan
- * "Error creating WebGL context" - walau kode HTML/JS-nya sendiri
- * 100% benar dan lancar kalau dibuka di browser/Activity biasa.
- *
- * Kalau nanti muncul error itu pas dicoba di HP kamu, ini rencana
- * cadangan yang perlu diriset lebih lanjut (BELUM diimplementasikan
- * di file ini, karena butuh testing langsung di device yang tidak
- * bisa saya lakukan dari sini):
- *   1. Teknik "VirtualDisplay" - render WebView ke display virtual
- *      terpisah yang benar2 "hidup", lalu proyeksikan hasilnya ke
- *      Surface wallpaper. Dilaporkan tidak 100% konsisten di semua
- *      versi Android (pernah jalan di Android 11, error di Android 7).
- *   2. Alternatif paling aman: turunkan skrip jadi Canvas2D biasa
- *      (bukan WebGL/Three.js) - lebih terbatas visualnya, tapi
- *      dijamin jalan di WallpaperService tanpa masalah GPU context.
- *
- * Uji coba LANGSUNG di HP kamu adalah cara paling pasti buat tau
- * apakah pendekatan sederhana ini cukup atau perlu opsi cadangan.
- * ==============================================================
- */
 class AquariumWallpaperService : WallpaperService() {
 
     override fun onCreateEngine(): Engine = AquariumEngine()
@@ -55,7 +23,18 @@ class AquariumWallpaperService : WallpaperService() {
         private var webView: WebView? = null
         private var isVisible = false
         private val handler = Handler(Looper.getMainLooper())
-        private val frameIntervalMs = 33L // ~30 fps target buat loop gambar manual ini
+        private val frameIntervalMs = 33L
+
+        private val debugLogLines = mutableListOf<String>()
+        private val debugPaintBg = Paint().apply {
+            color = Color.argb(200, 0, 0, 0)
+            style = Paint.Style.FILL
+        }
+        private val debugPaintText = Paint().apply {
+            color = Color.YELLOW
+            textSize = 28f
+            isAntiAlias = true
+        }
 
         private val drawRunnable = object : Runnable {
             override fun run() {
@@ -69,7 +48,7 @@ class AquariumWallpaperService : WallpaperService() {
         @SuppressLint("SetJavaScriptEnabled")
         override fun onCreate(surfaceHolder: SurfaceHolder) {
             super.onCreate(surfaceHolder)
-            setTouchEventsEnabled(true) // wajib, supaya bisa terima tap "Feed Fish"
+            setTouchEventsEnabled(true)
         }
 
         override fun onSurfaceCreated(holder: SurfaceHolder) {
@@ -82,17 +61,18 @@ class AquariumWallpaperService : WallpaperService() {
                         mediaPlaybackRequiresUserGesture = false
                         setRenderPriority(WebSettings.RenderPriority.HIGH)
                     }
-                    webChromeClient = WebChromeClient()
-
-                    // index.html = salinan Gfv9.html, ditaruh di app/src/main/assets/
-                    // PENTING: semua referensi .glb / get-model.js di dalam HTML
-                    // HARUS diubah dulu supaya load LANGSUNG dari folder assets
-                    // (file:///android_asset/namafile.glb), BUKAN lewat
-                    // guardedGlbUrl()/Netlify Function - itu tidak ada di app ini.
+                    webChromeClient = object : WebChromeClient() {
+                        override fun onConsoleMessage(cm: ConsoleMessage): Boolean {
+                            val line = "[${cm.messageLevel()}] ${cm.message()} (baris ${cm.lineNumber()})"
+                            synchronized(debugLogLines) {
+                                debugLogLines.add(line)
+                                if (debugLogLines.size > 12) debugLogLines.removeAt(0)
+                            }
+                            return true
+                        }
+                    }
                     loadUrl("file:///android_asset/index.html")
                 }
-                // Ukuran WebView disamakan dengan ukuran Surface wallpaper,
-                // supaya konten tergambar penuh layar, bukan cuma pojok kecil.
                 val w = desiredMinimumWidth
                 val h = desiredMinimumHeight
                 webView?.layout(0, 0, w, h)
@@ -111,15 +91,26 @@ class AquariumWallpaperService : WallpaperService() {
                 canvas = holder.lockCanvas()
                 if (canvas != null) {
                     webView?.draw(canvas)
+
+                    synchronized(debugLogLines) {
+                        if (debugLogLines.isNotEmpty()) {
+                            val lineHeight = 34f
+                            val boxHeight = 20f + lineHeight * debugLogLines.size
+                            canvas.drawRect(0f, 0f, canvas.width.toFloat(), boxHeight, debugPaintBg)
+                            var y = 40f
+                            for (line in debugLogLines) {
+                                canvas.drawText(line, 16f, y, debugPaintText)
+                                y += lineHeight
+                            }
+                        }
+                    }
                 }
             } catch (e: Exception) {
-                // Surface bisa saja sudah tidak valid (mis. wallpaper baru saja
-                // diganti/dimatikan) - tangkap supaya app tidak crash.
             } finally {
                 if (canvas != null) {
                     try {
                         holder.unlockCanvasAndPost(canvas)
-                    } catch (e: Exception) { /* abaikan */ }
+                    } catch (e: Exception) { }
                 }
             }
         }
@@ -131,8 +122,6 @@ class AquariumWallpaperService : WallpaperService() {
                 webView?.resumeTimers()
                 handler.post(drawRunnable)
             } else {
-                // Penting: hentikan loop gambar & pause WebView saat wallpaper
-                // tidak terlihat (misal user buka app lain) - hemat baterai/CPU.
                 handler.removeCallbacks(drawRunnable)
                 webView?.onPause()
                 webView?.pauseTimers()
@@ -140,8 +129,6 @@ class AquariumWallpaperService : WallpaperService() {
         }
 
         override fun onTouchEvent(event: MotionEvent) {
-            // Teruskan tap ke WebView, supaya tombol "Feed Fish" di
-            // dalam HTML bisa dipencet dari layar utama/home screen.
             webView?.dispatchTouchEvent(event)
             super.onTouchEvent(event)
         }
@@ -154,3 +141,4 @@ class AquariumWallpaperService : WallpaperService() {
         }
     }
 }
+        
