@@ -11,8 +11,12 @@ import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.webkit.ConsoleMessage
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.webkit.WebViewAssetLoader
 
 class AquariumWallpaperService : WallpaperService() {
 
@@ -54,6 +58,10 @@ class AquariumWallpaperService : WallpaperService() {
         override fun onSurfaceCreated(holder: SurfaceHolder) {
             super.onSurfaceCreated(holder)
             if (webView == null) {
+                val assetLoader = WebViewAssetLoader.Builder()
+                    .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this@AquariumWallpaperService))
+                    .build()
+
                 webView = WebView(this@AquariumWallpaperService).apply {
                     settings.apply {
                         javaScriptEnabled = true
@@ -71,7 +79,16 @@ class AquariumWallpaperService : WallpaperService() {
                             return true
                         }
                     }
-                    loadUrl("file:///android_asset/index.html")
+                    webViewClient = object : WebViewClient() {
+                        override fun shouldInterceptRequest(
+                            view: WebView,
+                            request: WebResourceRequest
+                        ): WebResourceResponse? {
+                            return assetLoader.shouldInterceptRequest(request.url)
+                        }
+                    }
+
+                    loadUrl("https://appassets.androidplatform.net/assets/index.html")
                 }
                 val w = desiredMinimumWidth
                 val h = desiredMinimumHeight
@@ -141,4 +158,5 @@ class AquariumWallpaperService : WallpaperService() {
         }
     }
 }
+
         
