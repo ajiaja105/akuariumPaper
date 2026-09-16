@@ -1,4 +1,3 @@
-
 package com.gentlefin.wallpaper
 
 import android.annotation.SuppressLint
@@ -12,6 +11,7 @@ import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.webkit.ConsoleMessage
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
@@ -41,6 +41,13 @@ class AquariumWallpaperService : WallpaperService() {
             isAntiAlias = true
         }
 
+        private fun logDebug(line: String) {
+            synchronized(debugLogLines) {
+                debugLogLines.add(line)
+                if (debugLogLines.size > 12) debugLogLines.removeAt(0)
+            }
+        }
+
         private val drawRunnable = object : Runnable {
             override fun run() {
                 drawFrame()
@@ -64,6 +71,7 @@ class AquariumWallpaperService : WallpaperService() {
                     .build()
 
                 webView = WebView(this@AquariumWallpaperService).apply {
+                    setBackgroundColor(Color.TRANSPARENT)
                     settings.apply {
                         javaScriptEnabled = true
                         domStorageEnabled = true
@@ -72,11 +80,7 @@ class AquariumWallpaperService : WallpaperService() {
                     }
                     webChromeClient = object : WebChromeClient() {
                         override fun onConsoleMessage(cm: ConsoleMessage): Boolean {
-                            val line = "[${cm.messageLevel()}] ${cm.message()} (baris ${cm.lineNumber()})"
-                            synchronized(debugLogLines) {
-                                debugLogLines.add(line)
-                                if (debugLogLines.size > 12) debugLogLines.removeAt(0)
-                            }
+                            logDebug("[${cm.messageLevel()}] ${cm.message()} (baris ${cm.lineNumber()})")
                             return true
                         }
                     }
@@ -86,6 +90,15 @@ class AquariumWallpaperService : WallpaperService() {
                             request: WebResourceRequest
                         ): WebResourceResponse? {
                             return assetLoader.shouldInterceptRequest(request.url)
+                        }
+
+                        override fun onReceivedError(
+                            view: WebView,
+                            request: WebResourceRequest,
+                            error: WebResourceError
+                        ) {
+                            super.onReceivedError(view, request, error)
+                            logDebug("[LOAD-FAIL] ${request.url} -> ${error.description}")
                         }
                     }
 
@@ -108,6 +121,7 @@ class AquariumWallpaperService : WallpaperService() {
             try {
                 canvas = holder.lockCanvas()
                 if (canvas != null) {
+                    canvas.drawColor(Color.BLACK)
                     webView?.draw(canvas)
 
                     synchronized(debugLogLines) {
@@ -171,4 +185,3 @@ class AquariumWallpaperService : WallpaperService() {
         }
     }
 }
-        
