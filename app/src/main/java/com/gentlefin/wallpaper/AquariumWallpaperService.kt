@@ -1,4 +1,5 @@
- package com.gentlefin.wallpaper
+
+package com.gentlefin.wallpaper
 
 import android.annotation.SuppressLint
 import android.graphics.Canvas
@@ -36,7 +37,7 @@ class AquariumWallpaperService : WallpaperService() {
         }
         private val debugPaintText = Paint().apply {
             color = Color.YELLOW
-            textSize = 28f
+            textSize = 24f
             isAntiAlias = true
         }
 
@@ -111,12 +112,24 @@ class AquariumWallpaperService : WallpaperService() {
 
                     synchronized(debugLogLines) {
                         if (debugLogLines.isNotEmpty()) {
-                            val lineHeight = 34f
-                            val boxHeight = 20f + lineHeight * debugLogLines.size
-                            canvas.drawRect(0f, 0f, canvas.width.toFloat(), boxHeight, debugPaintBg)
-                            var y = 40f
+                            val lineHeight = 32f
+                            val maxWidth = canvas.width.toFloat() - 24f
+                            val wrapped = mutableListOf<String>()
                             for (line in debugLogLines) {
-                                canvas.drawText(line, 16f, y, debugPaintText)
+                                var remaining = line
+                                while (remaining.isNotEmpty()) {
+                                    var cut = debugPaintText.breakText(remaining, true, maxWidth, null)
+                                    if (cut <= 0) cut = remaining.length
+                                    wrapped.add(remaining.substring(0, cut))
+                                    remaining = remaining.substring(cut)
+                                }
+                            }
+                            val shown = if (wrapped.size > 20) wrapped.takeLast(20) else wrapped
+                            val boxHeight = 20f + lineHeight * shown.size
+                            canvas.drawRect(0f, 0f, canvas.width.toFloat(), boxHeight, debugPaintBg)
+                            var y = 34f
+                            for (line in shown) {
+                                canvas.drawText(line, 12f, y, debugPaintText)
                                 y += lineHeight
                             }
                         }
@@ -158,5 +171,4 @@ class AquariumWallpaperService : WallpaperService() {
         }
     }
 }
-
         
